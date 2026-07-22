@@ -126,6 +126,7 @@
   .stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
   .stepper input{ -moz-appearance:textfield; appearance:textfield; }
   .export-tabs{ display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .base-format-row{ display:flex; gap:6px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
   .export-tabs button{ font-family:var(--mono); font-size:var(--ui-xs); padding:9px 14px; border:1px solid var(--line);
     background:var(--paper); cursor:pointer; border-radius:6px; color:var(--ink-soft); }
   .export-tabs button.active{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
@@ -458,6 +459,12 @@
         <div class="export-tabs">
           <button data-t="css" class="active">CSS variables</button>
           <button data-t="tw">Tailwind config</button>
+          <button data-t="base">Base styles</button>
+        </div>
+        <div class="base-format-row" id="baseFormatRow" style="display:none">
+          <span class="lh-unit-label-text">Token format</span>
+          <button type="button" class="vt-btn active" data-bf="css" title="Reference tokens as CSS custom properties — import tokens.css alongside">CSS var()</button>
+          <button type="button" class="vt-btn" data-bf="scss" title="Emit SCSS variables and reference those — for Sass-based theme pipelines">SCSS $vars</button>
         </div>
         <label class="responsive-toggle" title="Exports each size as a fluid clamp() between your mobile and desktop scales instead of a fixed px value"><input type="checkbox" id="responsiveToggle" checked> Fluid <span style="font-family:var(--mono)">clamp()</span> sizing between mobile and desktop</label>
         <textarea id="exportOut" readonly></textarea>
@@ -1478,10 +1485,163 @@ function buildTailwind(){
   return '/** @type {import(\'tailwindcss\').Config} */' + note + '\nmodule.exports = ' + JSON.stringify(config, null, 2);
 }
 
+// ---- base styles export: the element layer (typography + form elements) built from the tokens.
+// Deliberately stops at elements — classification/architecture stays with the dev.
+let baseFormat = 'css'; // 'css' -> var(--token), 'scss' -> $token with defs emitted
+
+function classSafe(name){
+  return /^-?[_a-zA-Z]/.test(name) ? name : 't-' + name;
+}
+
+function buildBase(){
+  const scss = baseFormat === 'scss';
+  const hDesktop = headingScale('desktop'), hMobile = headingScale('mobile');
+  const bDesktop = bodyScale('desktop'), bMobile = bodyScale('mobile');
+  const responsive = document.getElementById('responsiveToggle').checked;
+  const vwMin = +document.getElementById('vwMin').value || 375;
+  const vwMax = +document.getElementById('vwMax').value || 1440;
+  const padding = paddingScale();
+  const radius = radiusScale();
+  const spacing = spacingScale();
+  const fontHeading = document.getElementById('fontDisplay').value;
+  const fontBody = document.getElementById('fontBody').value;
+
+  const ref = n => scss ? '$' + n : `var(--${n})`;
+  const sizeVal = (mPx, dPx) => responsive ? clampFor(mPx, dPx, vwMin, vwMax) : dPx + 'px';
+  const lhVal = (meta, dPx, mPx) => {
+    if(lineHeightUnit === 'px'){
+      const dLh = (meta.lhPx && meta.lhPx.desktop != null) ? meta.lhPx.desktop : Math.round(meta.lh/100*dPx);
+      const mLh = (meta.lhPx && meta.lhPx.mobile != null) ? meta.lhPx.mobile : Math.round(meta.lh/100*mPx);
+      return responsive ? clampFor(mLh, dLh, vwMin, vwMax) : dLh + 'px';
+    }
+    return (meta.lh/100).toFixed(2);
+  };
+  const lsVal = (meta, dPx) =>
+    letterSpacingUnit === 'px' ? (Math.round(meta.ls/100*dPx*100)/100) + 'px' : (meta.ls/100).toFixed(4) + 'em';
+
+  const padNames = padding.map((_,i)=> STEP_NAMES[i] || (i+1));
+  const radNames = radius.map((_,i)=> STEP_NAMES[i] || (i+1));
+  const padV = padNames.length ? padNames[Math.min(1, padNames.length-1)] : null;
+  const padH = padNames.length ? padNames[Math.min(2, padNames.length-1)] : null;
+  const radName = radNames.length ? radNames[Math.min(1, radNames.length-1)] : null;
+
+  const textColor = (previewRoles.text != null && colors[previewRoles.text]) ? ref('color-' + colors[previewRoles.text].name) : null;
+  const primaryColor = (previewRoles.primary != null && colors[previewRoles.primary]) ? ref('color-' + colors[previewRoles.primary].name) : null;
+
+  const midBody = bDesktop.find(s=>s.name==='md') || bDesktop[Math.floor(bDesktop.length/2)] || bDesktop[0];
+  const smallBody = bDesktop.find(s=>s.name==='sm') || bDesktop[bDesktop.length-1] || midBody;
+
+  let out = '';
+  if(scss){
+    out += '// _base.scss — generated element layer (typography + form elements) built from your tokens.\n';
+    out += '// A starting point for the project base layer: rename variables to the project convention,\n';
+    out += '// then wrap and classify as usual. Margins and vertical rhythm are intentionally left out.\n\n';
+    out += '// tokens\n';
+    colors.forEach(c=> out += `$color-${c.name}: ${c.hex};\n`);
+    out += `$font-heading: ${fontHeading};\n$font-body: ${fontBody};\n`;
+    hDesktop.forEach((s,i)=>{
+      const meta = getMeta(headingMeta, s.name, 120, -1);
+      out += `$font-size-${s.name}: ${sizeVal(hMobile[i].px, s.px)};\n`;
+      out += `$line-height-${s.name}: ${lhVal(meta, s.px, hMobile[i].px)};\n`;
+      out += `$letter-spacing-${s.name}: ${lsVal(meta, s.px)};\n`;
+    });
+    bDesktop.forEach((s,i)=>{
+      const meta = getMeta(bodyMeta, s.name, 160, 0);
+      out += `$font-size-body-${s.name}: ${sizeVal(bMobile[i].px, s.px)};\n`;
+      out += `$line-height-body-${s.name}: ${lhVal(meta, s.px, bMobile[i].px)};\n`;
+      out += `$letter-spacing-body-${s.name}: ${lsVal(meta, s.px)};\n`;
+    });
+    spacing.forEach((px,i)=> out += `$space-${i+1}: ${px}px;\n`);
+    padding.forEach((px,i)=> out += `$padding-${padNames[i]}: ${px}px;\n`);
+    radius.forEach((px,i)=> out += `$radius-${radNames[i]}: ${px}px;\n`);
+    out += '\n';
+  } else {
+    out += '/* base.css — generated element layer (typography + form elements) built from your tokens.\n';
+    out += '   Import tokens.css BEFORE this file. A starting point for the project base layer:\n';
+    out += '   wrap and classify as usual. Margins and vertical rhythm are intentionally left out. */\n\n';
+  }
+
+  out += 'body {\n';
+  out += `  font-family: ${ref('font-body')};\n`;
+  out += `  font-size: ${ref('font-size-body-' + midBody.name)};\n`;
+  out += `  line-height: ${ref('line-height-body-' + midBody.name)};\n`;
+  if(textColor) out += `  color: ${textColor};\n`;
+  out += '}\n\n';
+
+  out += '/* headings */\n';
+  hDesktop.forEach(s=>{
+    const meta = getMeta(headingMeta, s.name, 120, -1);
+    const sel = /^h[1-6]$/.test(s.name) ? s.name : '.' + classSafe(s.name);
+    out += `${sel} {\n`;
+    out += `  font-family: ${ref('font-heading')};\n`;
+    out += `  font-size: ${ref('font-size-' + s.name)};\n`;
+    out += `  line-height: ${ref('line-height-' + s.name)};\n`;
+    out += `  letter-spacing: ${ref('letter-spacing-' + s.name)};\n`;
+    if(scss){
+      if(meta.case !== 'none') out += `  text-transform: ${meta.case};\n`;
+    } else {
+      out += `  text-transform: ${ref('text-case-' + s.name)};\n`;
+    }
+    out += '}\n';
+  });
+  out += '\n/* body text */\np {\n';
+  out += `  font-size: ${ref('font-size-body-' + midBody.name)};\n`;
+  out += `  line-height: ${ref('line-height-body-' + midBody.name)};\n`;
+  out += '}\n';
+  bDesktop.forEach(s=>{
+    out += `.text-body-${classSafe(s.name)} {\n`;
+    out += `  font-size: ${ref('font-size-body-' + s.name)};\n`;
+    out += `  line-height: ${ref('line-height-body-' + s.name)};\n`;
+    out += `  letter-spacing: ${ref('letter-spacing-body-' + s.name)};\n`;
+    out += '}\n';
+  });
+
+  out += '\n/* form elements — starting values; adjust borders and colours to the project */\n';
+  out += 'button {\n';
+  out += `  font-family: ${ref('font-body')};\n`;
+  out += `  font-size: ${ref('font-size-body-' + smallBody.name)};\n`;
+  out += '  font-weight: 700;\n';
+  if(padV && padH) out += `  padding: ${ref('padding-' + padV)} ${ref('padding-' + padH)};\n`;
+  if(radName) out += `  border-radius: ${ref('radius-' + radName)};\n`;
+  out += '  border: none;\n  cursor: pointer;\n';
+  if(primaryColor){
+    out += `  background: ${primaryColor};\n`;
+    out += '  color: #fff; /* check contrast against the primary colour */\n';
+  }
+  out += '}\n\n';
+  out += 'input[type="text"], input[type="email"], input[type="password"], input[type="number"],\ninput[type="search"], input[type="tel"], input[type="url"], select, textarea {\n';
+  out += `  font-family: ${ref('font-body')};\n`;
+  out += `  font-size: ${ref('font-size-body-' + midBody.name)};\n`;
+  if(padV && padH) out += `  padding: ${ref('padding-' + padV)} ${ref('padding-' + padH)};\n`;
+  if(radName) out += `  border-radius: ${ref('radius-' + radName)};\n`;
+  out += '  border: 1px solid #c9ccd1; /* swap for the project border colour */\n';
+  out += '  background: #fff;\n';
+  if(textColor) out += `  color: ${textColor};\n`;
+  out += '}\n\n';
+  out += 'label {\n  display: block;\n';
+  out += `  font-size: ${ref('font-size-body-' + smallBody.name)};\n`;
+  out += '}\n';
+  if(primaryColor){
+    out += `\na { color: ${primaryColor}; }\n`;
+    out += `\n:focus-visible {\n  outline: 2px solid ${primaryColor};\n  outline-offset: 2px;\n}\n`;
+  }
+  return out;
+}
+
+document.querySelectorAll('#baseFormatRow [data-bf]').forEach(b=>{
+  b.onclick = ()=>{
+    baseFormat = b.dataset.bf;
+    document.querySelectorAll('#baseFormatRow [data-bf]').forEach(x=> x.classList.toggle('active', x===b));
+    updateExport();
+    scheduleAutosave();
+  };
+});
+
 let activeTab = 'css';
 function updateExport(){
-  const out = { css: buildCss, tw: buildTailwind }[activeTab]();
+  const out = { css: buildCss, tw: buildTailwind, base: buildBase }[activeTab]();
   document.getElementById('exportOut').value = out;
+  document.getElementById('baseFormatRow').style.display = activeTab === 'base' ? 'flex' : 'none';
 }
 document.querySelectorAll('.export-tabs button').forEach(btn=>{
   btn.onclick = ()=>{
@@ -1565,8 +1725,8 @@ document.getElementById('downloadExport').onclick = ()=>{
     );
     if(!proceed) return;
   }
-  const ext = { css:'css', tw:'tailwind.config.js' }[activeTab];
-  const filename = activeTab === 'css' ? 'tokens.css' : ext;
+  const filenames = { css:'tokens.css', tw:'tailwind.config.js', base: baseFormat === 'scss' ? '_base.scss' : 'base.css' };
+  const filename = filenames[activeTab];
   const blob = new Blob([document.getElementById('exportOut').value], {type:'text/plain'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
@@ -1579,6 +1739,7 @@ document.getElementById('downloadAll').onclick = async ()=>{
   const zip = new JSZip();
   zip.file('tokens.css', buildCss());
   zip.file('tailwind.config.js', buildTailwind());
+  zip.file(baseFormat === 'scss' ? '_base.scss' : 'base.css', buildBase());
   const linked = uploadedFonts.filter(f=>f.mode === 'reference');
   if(linked.length){
     const fontsFolder = zip.folder('fonts');
@@ -1613,6 +1774,7 @@ function serializeProject(){
       lineHeightUnit,
       letterSpacingUnit
     },
+    baseFormat,
     spacingScale: document.getElementById('spacingScale').value,
     paddingScale: document.getElementById('paddingScale').value,
     radiusScale: document.getElementById('radiusScale').value,
@@ -1682,6 +1844,9 @@ async function restoreProject(data){
   document.getElementById('lsUnitPercent').classList.toggle('active', letterSpacingUnit === 'percent');
   document.getElementById('lsUnitPx').classList.toggle('active', letterSpacingUnit === 'px');
   updateLsLabels();
+
+  baseFormat = data.baseFormat === 'scss' ? 'scss' : 'css';
+  document.querySelectorAll('#baseFormatRow [data-bf]').forEach(x=> x.classList.toggle('active', x.dataset.bf === baseFormat));
 
   if(data.spacingScale) document.getElementById('spacingScale').value = data.spacingScale;
   if(data.paddingScale) document.getElementById('paddingScale').value = data.paddingScale;
