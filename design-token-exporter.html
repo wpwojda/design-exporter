@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Design Token Exporter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,700;1,400&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Sora:wght@500;700&family=Source+Serif+4:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F7F9; --paper-raised:#FFFFFF; --ink:#111214; --ink-soft:#5B6270;
+    --line:#d2d4d8; --accent:#4F46E5; --accent-soft:#EEF0FF;
+    --danger:#B42318; --danger-soft:#FDEEEE; --ok:#2E6B44; --ok-soft:#E1EEE5;
+    --mono:'JetBrains Mono', monospace;
+    --ui:'Hanken Grotesk', 'Inter', sans-serif;
+    --disp:var(--ui); --body:var(--ui);
+    /* the tool's own UI tokens — nothing interactive below 13px, controls 40px tall.
+       UI type is a two-weight system: everything is 400 or 700. */
+    --ui-xs:13px; --ui-sm:14px; --ui-md:15px; --ui-lg:17px;
+    --ctl:40px;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:var(--body); font-size:var(--ui-sm); }
+  .wrap{ max-width:2000px; margin:0 auto; padding:32px clamp(24px, 2.5vw, 48px) 110px; }
+  h1{ font-family:var(--disp); font-size:28px; font-weight:700; letter-spacing:-.01em; margin:0 0 4px; }
+  .sub{ color:var(--ink-soft); font-size:var(--ui-sm); max-width:640px; line-height:1.5; margin-bottom:28px;}
+  /* app layout: everything you adjust on the left, the export you're building on the right */
+  .grid{ display:grid; grid-template-columns:minmax(0,1fr) clamp(400px, 30vw, 560px); gap:24px; align-items:start; }
+  .main-col{ min-width:0; }
+  @media (max-width: 1100px){ .grid{ grid-template-columns:1fr; } }
+  .panel{ background:var(--paper-raised); border:1px solid var(--line); border-radius:10px; padding:24px;
+    margin-bottom:20px; box-shadow:0 1px 2px rgba(16,17,20,.03), 0 4px 16px rgba(16,17,20,.04);
+    container-type:inline-size; }
+  .panel h2{ font-family:var(--disp); font-size:var(--ui-lg); color:var(--ink); margin:0 0 16px; font-weight:700; letter-spacing:-.01em; }
+  .panel-export{ border-top:3px solid var(--accent); }
+  .side-sticky{ position:sticky; top:20px; }
+  .side-sticky .panel{ margin-bottom:0; }
+  /* the export fills the viewport height so as much of the end product is visible as possible */
+  .panel-export textarea{ height:calc(100vh - 330px); min-height:300px; }
+  @media (max-width: 1100px){
+    .side-sticky{ position:static; }
+    .panel-export textarea{ height:360px; }
+  }
+  label{ font-size:var(--ui-xs); color:var(--ink-soft); display:block; margin-bottom:5px; }
+  .label-hint{ font-family:var(--mono); font-size:var(--ui-xs); text-transform:none; opacity:.75; }
+  input[type=text], input[type=number]{
+    width:100%; padding:9px 12px; border:1px solid var(--line); border-radius:6px; background:var(--paper);
+    font-family:var(--body); font-size:var(--ui-md); color:var(--ink); margin-bottom:12px; min-height:var(--ctl);
+  }
+  select{
+    width:100%; padding:9px 36px 9px 12px; border:1px solid var(--line); border-radius:6px; background:var(--paper);
+    font-family:var(--body); font-size:var(--ui-md); color:var(--ink); margin-bottom:12px; min-height:var(--ctl);
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23565B5F' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center; background-size:10px 7px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  button, input, select, textarea{ font-family:inherit; }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .row > div{ flex:0 1 240px; }
+  .color-row{ display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .color-row input[type=text]{ min-width:0; }
+  .color-row input[type=color]{
+    width:var(--ctl); height:var(--ctl); border-radius:6px; border:1px solid var(--line);
+    padding:0; cursor:pointer; background:none; -webkit-appearance:none; appearance:none; flex-shrink:0;
+  }
+  .color-row input[type=color]::-webkit-color-swatch-wrapper{ padding:0; border-radius:6px; }
+  .color-row input[type=color]::-webkit-color-swatch{ border:none; border-radius:6px; }
+  .color-row input[type=color]::-moz-color-swatch{ border:none; border-radius:6px; }
+  .color-group{ margin-bottom:16px; }
+  .color-group:last-child{ margin-bottom:0; }
+  .color-group-label{ font-family:var(--mono); font-size:var(--ui-xs); text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-soft); margin:0 0 6px; }
+  .role-btn{ min-width:40px; height:var(--ctl); border:1px solid var(--line); border-radius:6px; background:none;
+    color:var(--ink-soft); font-size:var(--ui-xs); font-family:var(--body); cursor:pointer; flex-shrink:0; padding:0 6px; }
+  .role-btn.active{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  .color-row input[type=text]{ margin:0; }
+  .rm{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:18px;
+    width:36px; height:var(--ctl); flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+    border-radius:6px; line-height:1; }
+  .rm:hover{ background:var(--danger-soft); color:var(--danger); }
+  .action{ font-family:var(--body); font-size:var(--ui-md); font-weight:700; padding:0 18px; border-radius:6px;
+    border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; height:var(--ctl); box-sizing:border-box; line-height:1; }
+  .action.ghost{ background:none; color:var(--ink); border-color:var(--line); font-weight:400; }
+  .action.ghost:hover{ border-color:var(--accent); color:var(--accent); }
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; margin-top:6px; }
+  /* preview — sized by the tokens being edited, not the UI ramp */
+  .preview{ background:#fff; border:1px solid var(--line); border-radius:8px; padding:32px; }
+  .preview .eyebrow{ font-family:var(--mono-preview, monospace); font-size:12px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:8px; }
+  .preview h3{ font-family:var(--disp-preview); margin:0 0 10px; }
+  .preview p{ font-family:var(--body-preview); line-height:1.6; margin:0 0 16px; }
+  .preview .swatches{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+  .preview .sw{ width:40px; height:40px; border-radius:6px; border:1px solid rgba(0,0,0,.08); }
+  .preview .btn{ display:inline-block; padding:10px 18px; border-radius:6px; font-weight:600; font-size:14px; cursor:pointer; }
+  .type-scale-header, .row-controls{
+    display:grid; grid-template-columns:90px 120px 120px 120px 132px 150px 1fr; gap:10px; align-items:center;
+  }
+  .type-scale-row{
+    border-bottom:1px dashed var(--line); padding:14px 0;
+  }
+  .row-preview{
+    padding:4px 0 14px; overflow:hidden;
+  }
+  .row-preview .sample{
+    font-family:var(--disp-preview); white-space:nowrap; line-height:1.15;
+    display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:middle;
+  }
+  .type-scale-row .tag{ font-family:var(--mono); font-size:var(--ui-xs); color:var(--ink-soft); }
+  .stepper{
+    display:flex; align-items:stretch; height:var(--ctl); box-sizing:border-box; border:1px solid var(--line);
+    border-radius:6px; overflow:hidden; background:var(--paper); margin-bottom:12px;
+  }
+  .row-controls .stepper{ margin-bottom:0; }
+  .stepper-btn{
+    width:32px; flex-shrink:0; border:none; background:var(--paper-raised); color:var(--ink-soft);
+    font-size:18px; font-weight:700; cursor:pointer; line-height:1; padding:0;
+  }
+  .stepper-btn:hover{ background:var(--accent-soft); color:var(--accent); }
+  .stepper-btn:active{ background:var(--accent); color:#fff; }
+  .stepper input{
+    border:none; width:100%; min-width:0; text-align:center; font-family:var(--mono);
+    font-size:var(--ui-xs); padding:0 2px; background:var(--paper); color:var(--ink); margin:0; min-height:0;
+  }
+  .stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .stepper input{ -moz-appearance:textfield; appearance:textfield; }
+  .export-tabs{ display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .export-tabs button{ font-family:var(--mono); font-size:var(--ui-xs); padding:9px 14px; border:1px solid var(--line);
+    background:var(--paper); cursor:pointer; border-radius:6px; color:var(--ink-soft); }
+  .export-tabs button.active{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  textarea{ width:100%; height:240px; font-family:var(--mono); font-size:var(--ui-xs); line-height:1.6;
+    background:var(--ink); color:#E4E7EC; border:none; border-radius:8px; padding:14px; resize:vertical; }
+  .full{ grid-column:1 / -1; }
+  .spacing-list{ display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:8px; }
+  .spacing-chip{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .spacing-chip .bar{ background:var(--accent); width:20px; }
+  .spacing-chip .val{ font-family:var(--mono); font-size:var(--ui-xs); color:var(--ink-soft); }
+  .pr-row{ display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; margin-bottom:16px; }
+  .pr-chip{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .pr-chip .val{ font-family:var(--mono); font-size:var(--ui-xs); color:var(--ink-soft); }
+  .padding-box{ border:1.5px dashed var(--accent); box-sizing:border-box; display:flex; background:var(--paper); }
+  .padding-box .fill{ background:var(--accent); flex:1; border-radius:2px; }
+  .radius-box{ width:56px; height:56px; background:var(--accent); }
+  .header-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:24px; flex-wrap:wrap; margin-bottom:28px; }
+  .header-copy{ flex:1; min-width:280px; }
+  .header-copy h1{ margin:0 0 4px; }
+  .header-copy .sub{ margin-bottom:0; }
+  .header-actions{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; }
+  .header-actions .btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .header-actions .hint{ font-size:var(--ui-xs); color:var(--ink-soft); max-width:280px; text-align:right; line-height:1.4; }
+  .file-label{ position:relative; overflow:hidden; }
+  .file-label input[type=file]{ position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+  .panel-hint{ font-size:var(--ui-sm); color:var(--ink-soft); line-height:1.5; margin:-4px 0 14px; max-width:560px; }
+  .font-drop{
+    border:1.5px dashed var(--line); border-radius:8px; padding:14px; text-align:center;
+    cursor:pointer; position:relative; margin-top:6px;
+  }
+  .font-drop-hero{
+    padding:32px 20px; border:2px dashed var(--accent); background:var(--accent-soft);
+    margin-top:0;
+  }
+  .font-drop-hero p{ font-size:var(--ui-sm); color:var(--ink); }
+  .font-drop-hero strong{ font-family:var(--disp); font-size:var(--ui-md); font-weight:700; }
+  .font-drop-hero .hint-sm{ font-family:var(--mono); font-size:var(--ui-xs); color:var(--ink-soft); }
+  .font-drop.drag{ border-color:var(--accent); background:var(--accent-soft); }
+  .font-drop input{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .font-drop p{ margin:0; font-size:var(--ui-xs); color:var(--ink-soft); }
+  .uf-row{ display:flex; align-items:center; gap:8px; margin-top:8px; border:1px solid var(--line);
+    border-radius:6px; padding:8px 10px; background:var(--paper); flex-wrap:wrap; }
+  .uf-row .uf-sample{ font-size:16px; flex:1; min-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .uf-row input[type=text]{ width:130px; margin:0; font-size:var(--ui-xs); }
+  .uf-row .tag{ font-family:var(--mono); font-size:var(--ui-xs); color:var(--ink-soft); text-transform:uppercase; }
+  .uf-row .mode-toggle{ background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
+    cursor:pointer; font-size:var(--ui-xs); padding:0 10px; height:var(--ctl); }
+  .uf-row .mode-toggle:hover{ border-color:var(--accent); color:var(--accent); }
+  .status-badge{ font-family:var(--mono); font-size:var(--ui-xs); padding:3px 7px; border-radius:3px; }
+  .status-loading{ background:var(--accent-soft); color:var(--accent); }
+  .status-ready{ background:var(--ok-soft); color:var(--ok); }
+  .status-error{ background:var(--danger-soft); color:var(--danger); }
+  .viewport-toggle{ display:flex; gap:6px; margin-bottom:14px; }
+  .vt-btn{ font-family:var(--mono); font-size:var(--ui-xs); padding:9px 14px; border:1px solid var(--line);
+    background:var(--paper); cursor:pointer; border-radius:6px; color:var(--ink-soft); }
+  .vt-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  .vt-readout{ font-family:var(--mono); font-size:var(--ui-xs); color:var(--ink-soft); align-self:center; margin-left:6px; }
+  .preview-stage{ display:flex; justify-content:center; transition:padding .15s; }
+  .preview-stage .preview{ width:100%; transition:width .15s; }
+  .preview-stage.mobile-stage{ background:var(--paper); padding:16px; border-radius:8px; }
+  .preview-stage.mobile-stage .preview{ width:375px; max-width:100%; }
+  .type-scale-header{ padding:0 0 8px; margin-top:24px; border-top:1px dashed var(--line); padding-top:16px; }
+  .type-subhead{ font-family:var(--disp); font-size:var(--ui-md); font-weight:700; color:var(--ink);
+    margin:22px 0 12px; padding-top:16px; border-top:1px solid var(--line); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .type-subhead:first-of-type{ margin-top:18px; }
+  .type-subhead-tag{ font-family:var(--body); font-size:var(--ui-xs); font-weight:400; color:var(--ink-soft); text-transform:none; }
+  .case-toggle{
+    display:flex; height:var(--ctl); box-sizing:border-box; border:1px solid var(--line); border-radius:6px;
+    overflow:hidden; background:var(--paper);
+  }
+  .case-toggle button{
+    flex:1; border:none; background:none; color:var(--ink-soft); font-size:var(--ui-xs); font-weight:400;
+    font-family:var(--body); cursor:pointer; padding:0; border-left:1px solid var(--line);
+  }
+  .case-toggle button:first-child{ border-left:none; }
+  .case-toggle button.active{ background:var(--accent); color:#fff; font-weight:700; }
+  .case-toggle button:hover:not(.active){ background:var(--accent-soft); color:var(--accent); }
+  .type-scale-row .ts-name-input{ width:100%; height:var(--ctl); box-sizing:border-box; font-family:var(--mono); font-size:var(--ui-xs); padding:0 8px; margin:0; min-height:0; }
+  .unit-toggle-group{ display:flex; align-items:center; gap:6px; margin-left:auto; }
+  .lh-unit-label-text{ font-size:var(--ui-xs); font-weight:400; color:var(--ink-soft); font-family:var(--body); }
+  .type-scale-header span{ font-family:var(--mono); font-size:var(--ui-xs); text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+  .scale-view-row{ display:flex; align-items:center; gap:10px; margin:18px 0 14px; flex-wrap:wrap; }
+  .preview-toggle{ display:flex; gap:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .preview-toggle .vt-btn{ text-transform:none; font-size:var(--ui-xs); padding:9px 14px; border-radius:0; border:none; border-left:1px solid var(--line); }
+  .preview-toggle .vt-btn:first-child{ border-left:none; }
+  .type-scale-row .ts-size, .type-scale-row .ts-lh, .type-scale-row .ts-meta{ margin:0; }
+  .row-actions{ display:flex; gap:4px; }
+  .type-scale-row .ts-reset{ background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
+    cursor:pointer; font-size:var(--ui-xs); font-weight:400; flex:1; min-width:0; height:var(--ctl); padding:0 6px;
+    font-family:var(--body); white-space:nowrap; }
+  .type-scale-row .ts-reset:hover{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }
+  .type-scale-row .ts-delete{ width:36px; height:var(--ctl); flex-shrink:0; border:1px solid var(--line); border-radius:6px;
+    background:none; color:var(--ink-soft); cursor:pointer; font-size:18px; padding:0; line-height:1; }
+  .type-scale-row .ts-delete:hover{ background:var(--danger-soft); color:var(--danger); border-color:var(--danger); }
+  .stepper.overridden{ border-color:var(--accent); background:var(--accent-soft); }
+  .stepper.overridden input{ background:var(--accent-soft); color:var(--accent); font-weight:700; }
+  .responsive-toggle{ display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:var(--ui-xs); color:var(--ink-soft); }
+  .responsive-toggle input{ width:18px; height:18px; margin:0; accent-color:var(--accent); }
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--ink); color:#fff;
+    padding:12px 18px; border-radius:8px; display:flex; gap:16px; align-items:center; font-size:var(--ui-sm);
+    box-shadow:0 8px 24px rgba(16,17,20,.28); z-index:50; max-width:calc(100vw - 32px);
+    animation:toast-in .18s ease-out;
+  }
+  .toast button{ background:none; border:none; color:#A5B4FC; font-size:var(--ui-sm); font-weight:700; cursor:pointer; padding:4px 6px; }
+  @keyframes toast-in{ from{ opacity:0; transform:translate(-50%, 8px); } to{ opacity:1; transform:translate(-50%, 0); } }
+  /* Stack the scale-table controls when the PANEL is too narrow for the fixed columns —
+     a container query, because the panel's width depends on the export rail, not just the viewport.
+     The @media rule stays as a fallback for browsers without container query support. */
+  @container (max-width: 830px){
+    .type-scale-header{ display:none; }
+    .row-controls{ grid-template-columns:1fr 1fr 1fr; }
+    .row-controls .ts-name-input{ grid-column:1 / -1; }
+    .row-controls .case-toggle{ grid-column:1 / 3; }
+  }
+  @media (max-width: 960px){
+    .type-scale-header{ display:none; }
+    .row-controls{ grid-template-columns:1fr 1fr 1fr; }
+    .row-controls .ts-name-input{ grid-column:1 / -1; }
+    .row-controls .case-toggle{ grid-column:1 / 3; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="header-row">
+    <div class="header-copy">
+      <h1>Design Token Exporter</h1>
+      <p class="sub">Palette, type scale, and spacing — previewed live, exported as CSS variables and a Tailwind config.</p>
+    </div>
+    <div class="header-actions">
+      <div class="btn-row">
+        <button class="action ghost" id="newProjectBtn" title="Clear the autosave in this browser and start again">New project</button>
+        <button class="action ghost" id="saveProjectBtn">Save project</button>
+        <label class="action ghost file-label">
+          Load project
+          <input type="file" id="loadProjectInput" accept=".json">
+        </label>
+      </div>
+      <div class="hint">Autosaves in this browser as you work. Save project downloads a portable .json you can load anywhere.</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="main-col">
+    <div class="panel">
+      <h2>Live preview</h2>
+      <div class="viewport-toggle">
+        <button class="vt-btn active" data-vp="desktop" id="vtDesktop">Desktop</button>
+        <button class="vt-btn" data-vp="mobile" id="vtMobile">Mobile</button>
+        <span class="vt-readout" id="vtReadout"></span>
+      </div>
+      <div class="preview-stage" id="previewStage">
+        <div class="preview" id="previewPanel">
+          <div class="eyebrow">Proof sheet</div>
+          <h3 id="pvH3">The quick brown fox</h3>
+          <p id="pvP">Jumps over the lazy dog. This paragraph uses your body font and base size, so you can judge the pairing before it goes anywhere near a build.</p>
+          <span class="btn" id="pvBtn">Primary action</span>
+          <div class="swatches" id="pvSwatches"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Typography</h2>
+      <div class="row">
+        <div>
+          <label for="fontDisplay">Heading font</label>
+          <select id="fontDisplay">
+            <option value="'Space Grotesk', sans-serif">Space Grotesk</option>
+            <option value="'Fraunces', serif">Fraunces</option>
+            <option value="'Sora', sans-serif">Sora</option>
+            <option value="'Source Serif 4', serif">Source Serif 4</option>
+            <option value="'Inter', sans-serif">Inter</option>
+          </select>
+        </div>
+        <div>
+          <label for="fontBody">Body font</label>
+          <select id="fontBody">
+            <option value="'Inter', sans-serif">Inter</option>
+            <option value="'Source Serif 4', serif">Source Serif 4</option>
+            <option value="'Sora', sans-serif">Sora</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="type-subhead">Project fonts <span class="type-subhead-tag">upload to use instead of the presets above</span></div>
+      <p class="panel-hint">Upload project typefaces — they appear in the font menus above and travel with your export.</p>
+      <div class="font-drop font-drop-hero" id="fontDrop">
+        <input type="file" id="fontInput" accept=".woff,.woff2,.ttf,.otf" multiple>
+        <p><strong>Drop font files here</strong> or click to upload<br><span class="hint-sm">.woff2, .woff, .ttf, .otf</span></p>
+      </div>
+      <div id="uploadedFontsList"></div>
+
+      <div class="type-subhead">
+        Heading scale
+        <div class="unit-toggle-group">
+          <span class="lh-unit-label-text">Line-height</span>
+          <button class="vt-btn active" data-lhunit="percent" id="lhUnitPercent">%</button>
+          <button class="vt-btn" data-lhunit="px" id="lhUnitPx">px</button>
+          <span class="lh-unit-label-text">Letter-spacing</span>
+          <button class="vt-btn active" data-lsunit="percent" id="lsUnitPercent">%</button>
+          <button class="vt-btn" data-lsunit="px" id="lsUnitPx">px</button>
+        </div>
+      </div>
+      <div class="scale-view-row">
+        <span class="lh-unit-label-text">Configuring</span>
+        <div class="preview-toggle" id="headingPreviewToggle" title="Base size, ratio, and every size in this table apply to the selected viewport — all viewport toggles stay in sync">
+          <button type="button" class="vt-btn active" data-pvmode="desktop">Desktop</button>
+          <button type="button" class="vt-btn" data-pvmode="mobile">Mobile</button>
+        </div>
+
+      </div>
+      <div class="row">
+        <div>
+          <label for="headingBaseSize">Base size (px)</label>
+          <div class="stepper"><button type="button" class="stepper-btn" data-dir="-1" aria-label="Decrease">−</button><input type="number" id="headingBaseSize" value="16" min="1"><button type="button" class="stepper-btn" data-dir="1" aria-label="Increase">+</button></div>
+        </div>
+        <div>
+          <label for="headingRatio">Scale ratio</label>
+          <select id="headingRatio">
+            <option value="1.125">1.125 — Major Second</option>
+            <option value="1.2">1.2 — Minor Third</option>
+            <option value="1.25">1.25 — Major Third</option>
+            <option value="1.333" selected>1.333 — Perfect Fourth</option>
+            <option value="1.5">1.5 — Perfect Fifth</option>
+          </select>
+        </div>
+      </div>
+      <div class="type-scale-header">
+        <span class="tag">Name</span>
+        <span class="ts-col">Size</span>
+        <span class="ts-col lh-unit-header" id="lhHeaderHeading" title="Line-height for this step">LH %</span>
+        <span class="ts-col ls-unit-header" id="lsHeaderHeading" title="Letter-spacing for this step">LS %</span>
+        <span class="ts-col">Case</span>
+        <span class="ts-col">Actions</span>
+      </div>
+      <div id="headingScalePreview"></div>
+      <div class="controls">
+        <button class="action ghost" id="addHeadingStep">+ Add heading step</button>
+        <button class="action ghost" id="resetAllHeading" title="Clear every manual override in this table and go back to what base size × ratio computes">↺ Reset all sizes to scale</button>
+      </div>
+
+      <div class="type-subhead">
+        Body scale
+      </div>
+      <div class="scale-view-row">
+        <span class="lh-unit-label-text">Configuring</span>
+        <div class="preview-toggle" id="bodyPreviewToggle" title="Base size, ratio, and every size in this table apply to the selected viewport — all viewport toggles stay in sync">
+          <button type="button" class="vt-btn active" data-pvmode="desktop">Desktop</button>
+          <button type="button" class="vt-btn" data-pvmode="mobile">Mobile</button>
+        </div>
+
+      </div>
+      <div class="row">
+        <div>
+          <label for="bodyBaseSize">Base size (px)</label>
+          <div class="stepper"><button type="button" class="stepper-btn" data-dir="-1" aria-label="Decrease">−</button><input type="number" id="bodyBaseSize" value="16" min="1"><button type="button" class="stepper-btn" data-dir="1" aria-label="Increase">+</button></div>
+        </div>
+        <div>
+          <label for="bodyRatio">Scale ratio</label>
+          <select id="bodyRatio">
+            <option value="1.125" selected>1.125 — Major Second</option>
+            <option value="1.2">1.2 — Minor Third</option>
+            <option value="1.25">1.25 — Major Third</option>
+            <option value="1.333">1.333 — Perfect Fourth</option>
+            <option value="1.5">1.5 — Perfect Fifth</option>
+          </select>
+        </div>
+      </div>
+      <div class="type-scale-header">
+        <span class="tag">Name</span>
+        <span class="ts-col">Size</span>
+        <span class="ts-col lh-unit-header" id="lhHeaderBody" title="Line-height for this step">LH %</span>
+        <span class="ts-col ls-unit-header" id="lsHeaderBody" title="Letter-spacing for this step">LS %</span>
+        <span class="ts-col">Case</span>
+        <span class="ts-col">Actions</span>
+      </div>
+      <div id="bodyScalePreview"></div>
+      <div class="controls">
+        <button class="action ghost" id="addBodyStep">+ Add body step</button>
+        <button class="action ghost" id="resetAllBody" title="Clear every manual override in this table and go back to what base size × ratio computes">↺ Reset all sizes to scale</button>
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <div>
+          <label for="vwMin">Fluid from viewport (px)</label>
+          <div class="stepper"><button type="button" class="stepper-btn" data-dir="-1" aria-label="Decrease">−</button><input type="number" id="vwMin" value="375" min="1"><button type="button" class="stepper-btn" data-dir="1" aria-label="Increase">+</button></div>
+        </div>
+        <div>
+          <label for="vwMax">Fluid to viewport (px)</label>
+          <div class="stepper"><button type="button" class="stepper-btn" data-dir="-1" aria-label="Decrease">−</button><input type="number" id="vwMax" value="1440" min="1"><button type="button" class="stepper-btn" data-dir="1" aria-label="Increase">+</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Palette</h2>
+        <div id="colorRows"></div>
+        <div class="controls">
+          <button class="action ghost" id="addColor">+ Add colour</button>
+        </div>
+      </div>
+
+    <div class="panel">
+      <h2>Spacing</h2>
+        <label for="spacingScale">Scale (px, comma separated)</label>
+        <input type="text" id="spacingScale" value="4, 8, 12, 16, 24, 32, 48, 64, 96">
+        <div class="spacing-list" id="spacingList"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Padding &amp; Radius</h2>
+        <label for="paddingScale">Padding scale (px, comma separated)</label>
+        <input type="text" id="paddingScale" value="8, 12, 16, 24, 32">
+        <div class="pr-row" id="paddingList"></div>
+
+        <label for="radiusScale">Radius scale (px, comma separated)</label>
+        <input type="text" id="radiusScale" value="4, 8, 12, 16, 999" title="Use a large value like 999 for a full pill">
+        <div class="pr-row" id="radiusList"></div>
+      </div>
+    </div>
+
+    <div class="side-sticky">
+      <div class="panel panel-export">
+        <h2>Export</h2>
+        <div class="export-tabs">
+          <button data-t="css" class="active">CSS variables</button>
+          <button data-t="tw">Tailwind config</button>
+        </div>
+        <label class="responsive-toggle" title="Exports each size as a fluid clamp() between your mobile and desktop scales instead of a fixed px value"><input type="checkbox" id="responsiveToggle" checked> Fluid <span style="font-family:var(--mono)">clamp()</span> sizing between mobile and desktop</label>
+        <textarea id="exportOut" readonly></textarea>
+        <div class="controls">
+          <button class="action" id="copyExport">Copy</button>
+          <button class="action ghost" id="downloadExport">Download file</button>
+          <button class="action ghost" id="downloadAll">Download all (zip)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+let colors = [
+  {name:'primary', hex:'#2B4C7E'},
+  {name:'ink', hex:'#15171A'},
+  {name:'paper', hex:'#F1F2EE'},
+  {name:'accent', hex:'#A13A3A'},
+];
+
+const colorRows = document.getElementById('colorRows');
+let previewRoles = { primary: 0, text: 1 }; // indices into colors[] driving the live preview
+
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function cleanName(s){
+  return s.trim().replace(/\s+/g,'-').replace(/["'<>&]/g,'').toLowerCase();
+}
+
+let toastTimer = null;
+function dismissToast(){
+  const el = document.getElementById('undoToast');
+  if(el) el.remove();
+  if(toastTimer){ clearTimeout(toastTimer); toastTimer = null; }
+}
+function showToast(msg, undoFn){
+  dismissToast();
+  const t = document.createElement('div');
+  t.className = 'toast'; t.id = 'undoToast'; t.setAttribute('role','status');
+  t.innerHTML = `<span>${esc(msg)}</span>` + (undoFn ? `<button type="button">Undo</button>` : '');
+  document.body.appendChild(t);
+  if(undoFn) t.querySelector('button').onclick = ()=>{ undoFn(); dismissToast(); };
+  toastTimer = setTimeout(dismissToast, 6000);
+}
+
+function flashLabel(btn, text){
+  if(btn.dataset.flashing) return;
+  const old = btn.textContent;
+  btn.dataset.flashing = '1';
+  btn.textContent = text;
+  setTimeout(()=>{ btn.textContent = old; delete btn.dataset.flashing; }, 1400);
+}
+
+function normalizeHex(h){
+  h = (h || '').trim();
+  if(!h) return '#000000';
+  if(h[0] !== '#') h = '#' + h;
+  if(/^#[0-9a-fA-F]{3}$/.test(h)){
+    h = '#' + [...h.slice(1)].map(c => c + c).join('');
+  }
+  if(!/^#[0-9a-fA-F]{6}$/.test(h)) return '#000000';
+  return h.toLowerCase();
+}
+
+function computeColorGroups(){
+  const groups = {}; const order = []; const ungrouped = [];
+  colors.forEach((c, i) => {
+    const m = c.name.match(/^(.+?)-(\d{1,4})$/);
+    if(m){
+      const key = m[1];
+      if(!groups[key]){ groups[key] = []; order.push(key); }
+      groups[key].push(i);
+    } else {
+      ungrouped.push(i);
+    }
+  });
+  return { groups, order, ungrouped };
+}
+
+function colorRowHtml(i){
+  const c = colors[i];
+  return `
+    <div class="color-row">
+      <input type="color" value="${c.hex}" data-i="${i}" data-f="hex" aria-label="Pick colour for ${esc(c.name)}">
+      <input type="text" value="${esc(c.name)}" data-i="${i}" data-f="name" placeholder="name" aria-label="Colour name">
+      <input type="text" value="${c.hex}" data-i="${i}" data-f="hextext" style="width:104px;font-family:var(--mono);font-size:var(--ui-xs);" aria-label="Hex value for ${esc(c.name)}">
+      <button type="button" class="role-btn ${previewRoles.primary === i ? 'active' : ''}" data-role="primary" data-i="${i}" title="Use as the button/primary colour in the live preview">Btn</button>
+      <button type="button" class="role-btn ${previewRoles.text === i ? 'active' : ''}" data-role="text" data-i="${i}" title="Use as the text colour in the live preview">Aa</button>
+      <button type="button" class="rm" data-i="${i}" title="Remove this colour" aria-label="Remove ${esc(c.name)}">×</button>
+    </div>`;
+}
+
+function renderColors(){
+  const { groups, order, ungrouped } = computeColorGroups();
+  let html = '';
+  order.forEach(key => {
+    html += `<div class="color-group"><div class="color-group-label">${esc(key)}</div>`;
+    groups[key].forEach(i => html += colorRowHtml(i));
+    html += `</div>`;
+  });
+  if(ungrouped.length){
+    html += `<div class="color-group">`;
+    if(order.length) html += `<div class="color-group-label">other</div>`;
+    ungrouped.forEach(i => html += colorRowHtml(i));
+    html += `</div>`;
+  }
+  colorRows.innerHTML = html;
+
+  colorRows.querySelectorAll('input[data-f=hex]').forEach(el => {
+    el.oninput = () => {
+      const i = +el.dataset.i;
+      colors[i].hex = el.value;
+      const sib = colorRows.querySelector(`input[data-f=hextext][data-i="${i}"]`);
+      if(sib) sib.value = el.value;
+      updateAll();
+    };
+  });
+  colorRows.querySelectorAll('input[data-f=name]').forEach(el => {
+    el.oninput = () => {
+      colors[+el.dataset.i].name = cleanName(el.value);
+      updateAll();
+    };
+    el.addEventListener('blur', () => { renderColors(); updateAll(); }); // regroup once editing settles
+  });
+  colorRows.querySelectorAll('input[data-f=hextext]').forEach(el => {
+    el.onchange = () => {
+      const i = +el.dataset.i;
+      const normalized = normalizeHex(el.value);
+      colors[i].hex = normalized;
+      el.value = normalized;
+      const sib = colorRows.querySelector(`input[data-f=hex][data-i="${i}"]`);
+      if(sib) sib.value = normalized;
+      updateAll();
+    };
+  });
+  colorRows.querySelectorAll('.role-btn').forEach(b => {
+    b.onclick = () => {
+      previewRoles[b.dataset.role] = +b.dataset.i;
+      renderColors();
+      updateAll();
+    };
+  });
+  colorRows.querySelectorAll('.rm').forEach(b => {
+    b.onclick = () => {
+      const i = +b.dataset.i;
+      const prevColors = colors.map(c => ({ ...c }));
+      const prevRoles = { ...previewRoles };
+      const removed = colors[i] ? colors[i].name : 'colour';
+      colors.splice(i, 1);
+      ['primary', 'text'].forEach(role => {
+        if(previewRoles[role] === i) previewRoles[role] = null;
+        else if(previewRoles[role] != null && previewRoles[role] > i) previewRoles[role]--;
+      });
+      renderColors();
+      updateAll();
+      showToast(`Removed "${removed}"`, () => {
+        colors = prevColors;
+        previewRoles = prevRoles;
+        renderColors();
+        updateAll();
+      });
+    };
+  });
+}
+// ---- custom font upload ----
+let uploadedFonts = []; // {name, family, format, base64, file, size, mode, status}
+const EMBED_THRESHOLD = 200 * 1024; // 200KB — above this, reference instead of embedding
+
+function fmtFromFilename(name){
+  const ext = name.split('.').pop().toLowerCase();
+  return { woff2:'woff2', woff:'woff', ttf:'truetype', otf:'opentype' }[ext] || 'woff2';
+}
+function fileExtFromFilename(name){
+  return name.split('.').pop().toLowerCase();
+}
+function formatSize(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(0) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function arrayBufferToBase64(buffer){
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunk = 0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(binary);
+}
+function base64ToBytes(base64){
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function refreshFontSelects(){
+  ['fontDisplay','fontBody'].forEach(id=>{
+    const sel = document.getElementById(id);
+    let group = sel.querySelector('optgroup[label="Uploaded"]');
+    if(!group){
+      group = document.createElement('optgroup');
+      group.label = 'Uploaded';
+      sel.appendChild(group);
+    }
+    group.innerHTML = '';
+    uploadedFonts.forEach(f=>{
+      const opt = document.createElement('option');
+      opt.value = `'${f.family}', sans-serif`;
+      opt.textContent = f.name + ' (uploaded)';
+      group.appendChild(opt);
+    });
+  });
+}
+
+function renderUploadedFonts(){
+  const host = document.getElementById('uploadedFontsList');
+  host.innerHTML = '';
+  uploadedFonts.forEach((f,i)=>{
+    const row = document.createElement('div');
+    row.className = 'uf-row';
+    const modeLabel = f.mode === 'embed' ? 'embedded' : 'linked file';
+    const statusClass = f.status === 'ready' ? 'status-ready' : (f.status === 'error' ? 'status-error' : 'status-loading');
+    const warn = f.size > EMBED_THRESHOLD
+      ? `<span class="tag" title="Files over 200KB are linked rather than embedded, to keep tokens.css small. Include the font file when you share this — 'Download all' zips it in automatically.">${formatSize(f.size)} · ${modeLabel}</span>`
+      : `<span class="tag">${formatSize(f.size)} · ${modeLabel}</span>`;
+    row.innerHTML = `
+      <span class="uf-sample" style="font-family:'${f.family}', sans-serif">${esc(f.name)}</span>
+      <span class="status-badge ${statusClass}">${f.status}</span>
+      ${warn}
+      <button type="button" class="mode-toggle" data-i="${i}" title="Switch how this font is included in exports">${f.mode === 'embed' ? 'Link' : 'Embed'}</button>
+      <input type="text" value="${esc(f.name)}" data-i="${i}" aria-label="Font display name">
+      <button type="button" class="rm" data-i="${i}" title="Remove this font" aria-label="Remove ${esc(f.name)}">×</button>
+    `;
+    host.appendChild(row);
+  });
+  host.querySelectorAll('input[type=text]').forEach(inp=>{
+    inp.onchange = ()=>{ uploadedFonts[+inp.dataset.i].name = inp.value; renderUploadedFonts(); refreshFontSelects(); updateAll(); };
+  });
+  host.querySelectorAll('.rm').forEach(b=>{
+    b.onclick = ()=>{ uploadedFonts.splice(+b.dataset.i,1); renderUploadedFonts(); refreshFontSelects(); updateAll(); };
+  });
+  host.querySelectorAll('.mode-toggle').forEach(b=>{
+    b.onclick = ()=>{
+      const f = uploadedFonts[+b.dataset.i];
+      f.mode = f.mode === 'embed' ? 'reference' : 'embed';
+      renderUploadedFonts(); updateAll();
+    };
+  });
+}
+
+function loadFontFile(file){
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    const buffer = reader.result;
+    const base64 = arrayBufferToBase64(buffer);
+    const rawName = file.name.replace(/\.[^.]+$/, '');
+    const family = 'uf-' + rawName.replace(/[^a-z0-9]/gi,'-').toLowerCase() + '-' + Math.random().toString(36).slice(2,6);
+    const format = fmtFromFilename(file.name);
+    const entry = {
+      name: rawName, family, format, base64, file, filename: file.name, size: file.size,
+      mode: file.size > EMBED_THRESHOLD ? 'reference' : 'embed',
+      status:'loading'
+    };
+    uploadedFonts.push(entry);
+    renderUploadedFonts();
+    try{
+      const fontFace = new FontFace(family, `url(data:font/${format};base64,${base64})`);
+      await fontFace.load();
+      document.fonts.add(fontFace);
+      entry.status = 'ready';
+    }catch(e){
+      entry.status = 'error';
+    }
+    renderUploadedFonts();
+    refreshFontSelects();
+    updateAll();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+const fontDrop = document.getElementById('fontDrop');
+document.getElementById('fontInput').addEventListener('change', e=>{
+  [...e.target.files].forEach(loadFontFile);
+});
+['dragenter','dragover'].forEach(ev=> fontDrop.addEventListener(ev, e=>{ e.preventDefault(); fontDrop.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev=> fontDrop.addEventListener(ev, e=>{ e.preventDefault(); fontDrop.classList.remove('drag'); }));
+fontDrop.addEventListener('drop', e=>{
+  e.preventDefault(); fontDrop.classList.remove('drag');
+  [...e.dataTransfer.files].forEach(loadFontFile);
+});
+
+document.getElementById('addColor').onclick = ()=>{
+  colors.push({name:'color-'+(colors.length+1), hex:'#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0')});
+  renderColors(); updateAll();
+};
+
+const STEP_NAMES = ['xs','sm','base','md','lg','xl','2xl','3xl','4xl','5xl']; // used for padding/radius naming
+let headingStepNames = ['h1','h2','h3','h4','h5','h6']; // freely editable/addable, largest-first
+let bodyStepNames = ['lg','md','sm']; // freely editable/addable, largest-first
+let headingOverrides = {}; // { 'h1': { desktop: px, mobile: px } }
+let bodyOverrides = {};    // { 'lg': { desktop: px, mobile: px } }
+let headingMeta = {}; // { 'h1': { lh: 120, ls: -2 } } — lh/ls as % of font size, applies to both viewports
+let bodyMeta = {};    // { 'lg': { lh: 160, ls: 0 } }
+
+function getMeta(store, name, lhDefault, lsDefault){
+  if(!store[name]) store[name] = { lh: lhDefault, ls: lsDefault, case: 'none' };
+  if(store[name].case === undefined) store[name].case = 'none'; // back-compat for metas saved before per-step case
+  return store[name];
+}
+
+// In "%" mode, one line-height value works for both viewports (percentages scale naturally).
+// In "px" mode, desktop and mobile genuinely need independent absolute values — a 68px heading
+// and a 59px heading can't share one fixed px line-height and both look right. So in px mode,
+// this field follows the same Desktop/Mobile view toggle as the Size field.
+function lhCssValue(meta, view, fontSizePx){
+  if(lineHeightUnit === 'px' && meta.lhPx && meta.lhPx[view] != null){
+    return meta.lhPx[view] + 'px';
+  }
+  return meta.lh / 100; // unitless — scales with whatever font-size it's applied to
+}
+function lhFieldHtml(meta, name, currentView, currentViewPx){
+  if(lineHeightUnit === 'percent'){
+    return stepperHtml(meta.lh, `class="ts-lh" data-name="${name}" title="Line-height % (applies to both desktop and mobile)"`);
+  }
+  const val = (meta.lhPx && meta.lhPx[currentView] != null) ? meta.lhPx[currentView] : Math.round(meta.lh / 100 * currentViewPx);
+  return stepperHtml(val, `class="ts-lh" data-name="${name}" data-view="${currentView}" title="Line-height (px) — ${currentView}"`);
+}
+
+function caseToggleHtml(name, current){
+  const opts = [['none','Aa'],['uppercase','AA'],['lowercase','aa']];
+  return `<div class="case-toggle" data-name="${name}">` +
+    opts.map(([val,label])=>
+      `<button type="button" class="case-btn ${current===val?'active':''}" data-case="${val}" title="${val==='none'?'Sentence case':val}">${label}</button>`
+    ).join('') +
+    `</div>`;
+}
+
+function stepperHtml(value, attrs, overridden){
+  const cls = overridden ? 'stepper overridden' : 'stepper';
+  const title = overridden ? ' title="Custom value — set by hand, so it won\'t move if you change the base size or ratio. Click Reset to sync it back."' : '';
+  return `<div class="${cls}"${title}>
+    <button type="button" class="stepper-btn" data-dir="-1" aria-label="Decrease">−</button>
+    <input type="number" ${attrs} value="${value}">
+    <button type="button" class="stepper-btn" data-dir="1" aria-label="Increase">+</button>
+  </div>`;
+}
+function wireSteppers(host){
+  host.querySelectorAll('.stepper-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const inp = btn.parentElement.querySelector('input');
+      const dir = +btn.dataset.dir;
+      const min = inp.min !== '' ? parseFloat(inp.min) : -Infinity;
+      inp.value = Math.max(min, (parseFloat(inp.value) || 0) + dir);
+      inp.dispatchEvent(new Event('change', { bubbles:true }));
+    };
+  });
+}
+
+let lineHeightUnit = 'percent'; // 'percent' | 'px' — display/entry only; stored value is always % internally
+function updateLhLabels(){
+  const label = lineHeightUnit === 'px' ? 'LH px' : 'LH %';
+  const tip = lineHeightUnit === 'px'
+    ? 'Line-height for this step, as an absolute pixel value for whichever viewport is toggled above'
+    : 'Line-height, as a percentage of font size (120 = 1.2 line-height) — same value applies to both viewports';
+  ['lhHeaderHeading','lhHeaderBody'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.textContent = label;
+    el.title = tip;
+  });
+}
+document.getElementById('lhUnitPercent').onclick = ()=>{
+  lineHeightUnit = 'percent';
+  document.getElementById('lhUnitPercent').classList.add('active');
+  document.getElementById('lhUnitPx').classList.remove('active');
+  updateLhLabels();
+  updateAll();
+};
+document.getElementById('lhUnitPx').onclick = ()=>{
+  lineHeightUnit = 'px';
+  document.getElementById('lhUnitPx').classList.add('active');
+  document.getElementById('lhUnitPercent').classList.remove('active');
+  updateLhLabels();
+  updateAll();
+};
+
+let letterSpacingUnit = 'percent'; // 'percent' | 'px' — display/entry only; stored value is always % internally
+function lsToDisplay(percent, fontSizePx){
+  return letterSpacingUnit === 'px' ? Math.round((percent / 100 * fontSizePx) * 100) / 100 : percent;
+}
+function lsFromDisplay(value, fontSizePx){
+  return letterSpacingUnit === 'px' ? (fontSizePx ? (value / fontSizePx * 100) : value) : value;
+}
+function updateLsLabels(){
+  const label = letterSpacingUnit === 'px' ? 'LS px' : 'LS %';
+  const tip = letterSpacingUnit === 'px'
+    ? 'Letter-spacing for this step, as an absolute pixel value'
+    : 'Letter-spacing, as a percentage of font size (-2 = -0.02em)';
+  ['lsHeaderHeading','lsHeaderBody'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.textContent = label;
+    el.title = tip;
+  });
+}
+document.getElementById('lsUnitPercent').onclick = ()=>{
+  letterSpacingUnit = 'percent';
+  document.getElementById('lsUnitPercent').classList.add('active');
+  document.getElementById('lsUnitPx').classList.remove('active');
+  updateLsLabels();
+  updateAll();
+};
+document.getElementById('lsUnitPx').onclick = ()=>{
+  letterSpacingUnit = 'px';
+  document.getElementById('lsUnitPx').classList.add('active');
+  document.getElementById('lsUnitPercent').classList.remove('active');
+  updateLsLabels();
+  updateAll();
+};
+
+function computeScaleSteps(names, base, ratio){
+  // names ordered largest-first; last name = base (exponent 0)
+  return names.map((name, idx) => ({
+    name,
+    computed: Math.ceil(base * Math.pow(ratio, names.length - 1 - idx))
+  }));
+}
+function scaleWithOverrides(names, base, ratio, overrides, view){
+  return computeScaleSteps(names, base, ratio).map(s => {
+    const ov = overrides[s.name] && overrides[s.name][view];
+    const overridden = ov !== undefined && ov !== null && ov !== '';
+    return { name: s.name, px: overridden ? +ov : s.computed, overridden };
+  });
+}
+// Base size and ratio are per-viewport now — desktop and mobile can each have their own scale
+// entirely (different ratio, not just different starting size). The visible Base size/Ratio
+// fields are just a window onto whichever view is currently toggled; these objects are the
+// actual source of truth.
+let headingBase = { desktop: 16, mobile: 15 };
+let headingRatioVal = { desktop: 1.333, mobile: 1.333 };
+let bodyBase = { desktop: 16, mobile: 15 };
+let bodyRatioVal = { desktop: 1.125, mobile: 1.125 };
+
+// One viewport state for the whole tool — the live preview and both scale tables
+// always show the same view, so the toggles can never silently disagree.
+let viewMode = 'desktop';
+function setViewMode(mode){
+  viewMode = mode === 'mobile' ? 'mobile' : 'desktop';
+  document.getElementById('vtDesktop').classList.toggle('active', viewMode === 'desktop');
+  document.getElementById('vtMobile').classList.toggle('active', viewMode === 'mobile');
+  document.getElementById('previewStage').classList.toggle('mobile-stage', viewMode === 'mobile');
+  ['headingPreviewToggle','bodyPreviewToggle'].forEach(id=>{
+    document.getElementById(id).querySelectorAll('button').forEach(x=> x.classList.toggle('active', x.dataset.pvmode === viewMode));
+  });
+  document.getElementById('headingBaseSize').value = headingBase[viewMode];
+  document.getElementById('headingRatio').value = headingRatioVal[viewMode];
+  document.getElementById('bodyBaseSize').value = bodyBase[viewMode];
+  document.getElementById('bodyRatio').value = bodyRatioVal[viewMode];
+  updateAll();
+}
+
+function headingScale(view){
+  view = view || 'desktop';
+  const base = headingBase[view] || (view === 'mobile' ? 14 : 16);
+  const ratio = headingRatioVal[view] || 1.333;
+  return scaleWithOverrides(headingStepNames, base, ratio, headingOverrides, view);
+}
+function bodyScale(view){
+  view = view || 'desktop';
+  const base = bodyBase[view] || (view === 'mobile' ? 14 : 16);
+  const ratio = bodyRatioVal[view] || 1.125;
+  return scaleWithOverrides(bodyStepNames, base, ratio, bodyOverrides, view);
+}
+function spacingScale(){
+  return document.getElementById('spacingScale').value.split(',').map(s=>parseFloat(s.trim())).filter(n=>!isNaN(n));
+}
+function paddingScale(){
+  return document.getElementById('paddingScale').value.split(',').map(s=>parseFloat(s.trim())).filter(n=>!isNaN(n));
+}
+function radiusScale(){
+  return document.getElementById('radiusScale').value.split(',').map(s=>parseFloat(s.trim())).filter(n=>!isNaN(n));
+}
+function renderPaddingPreview(){
+  const scale = paddingScale();
+  document.getElementById('paddingList').innerHTML = scale.map((px,i)=>{
+    const displayPad = Math.min(px, 40);
+    const box = displayPad*2 + 28;
+    return `
+    <div class="pr-chip">
+      <div class="padding-box" style="width:${box}px; height:${box}px; padding:${displayPad}px;"><div class="fill"></div></div>
+      <div class="val">${STEP_NAMES[i] || i+1} · ${px}px</div>
+    </div>`;
+  }).join('');
+}
+function renderRadiusPreview(){
+  const scale = radiusScale();
+  document.getElementById('radiusList').innerHTML = scale.map((px,i)=>{
+    const displayRadius = Math.min(px, 28);
+    return `
+    <div class="pr-chip">
+      <div class="radius-box" style="border-radius:${displayRadius}px;"></div>
+      <div class="val">${STEP_NAMES[i] || i+1} · ${px >= 999 ? 'full' : px+'px'}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHeadingScalePreview(){
+  const desktopScale = headingScale('desktop');
+  const mobileScale = headingScale('mobile');
+  const disp = document.getElementById('fontDisplay').value;
+  const host = document.getElementById('headingScalePreview');
+  const view = viewMode === 'mobile' ? 'mobile' : 'desktop';
+  host.innerHTML = desktopScale.map((s,i)=>{
+    const m = mobileScale[i];
+    const meta = getMeta(headingMeta, s.name, 120, -1);
+    const pv = view === 'mobile' ? m : s;
+    return `
+    <div class="type-scale-row">
+      <div class="row-preview">
+        <span class="sample" style="font-size:${pv.px}px; font-family:${disp}; line-height:${lhCssValue(meta, view, pv.px)}; letter-spacing:${meta.ls/100}em; text-transform:${meta.case};">The quick brown fox jumps over the lazy dog</span>
+      </div>
+      <div class="row-controls">
+        <input type="text" class="ts-name-input" data-idx="${i}" value="${esc(s.name)}" aria-label="Step name">
+        ${stepperHtml(pv.px, `class="ts-size" data-name="${s.name}" data-view="${view}"`, pv.overridden)}
+        ${lhFieldHtml(meta, s.name, view, pv.px)}
+        ${stepperHtml(lsToDisplay(meta.ls, pv.px), `class="ts-meta" data-name="${s.name}" data-field="ls" data-fs="${pv.px}" title="Letter-spacing"`)}
+        ${caseToggleHtml(s.name, meta.case)}
+        <div class="row-actions">
+          <button class="ts-reset" data-name="${s.name}" title="Reset this step's sizes back to the computed scale">↺ Reset</button>
+          <button class="ts-delete" data-idx="${i}" title="Delete this step">×</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  wireSteppers(host);
+  host.querySelectorAll('.ts-size').forEach(inp=>{
+    inp.onchange = ()=>{
+      const name = inp.dataset.name, v = inp.dataset.view;
+      if(!headingOverrides[name]) headingOverrides[name] = {};
+      headingOverrides[name][v] = inp.value;
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.ts-lh').forEach(inp=>{
+    inp.onchange = ()=>{
+      const meta = getMeta(headingMeta, inp.dataset.name, 120, -1);
+      if(lineHeightUnit === 'percent'){
+        meta.lh = +inp.value;
+      } else {
+        if(!meta.lhPx) meta.lhPx = {};
+        meta.lhPx[inp.dataset.view] = +inp.value;
+      }
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.ts-meta').forEach(inp=>{
+    inp.onchange = ()=>{
+      const meta = getMeta(headingMeta, inp.dataset.name, 120, -1);
+      if(inp.dataset.field === 'ls'){
+        meta.ls = lsFromDisplay(+inp.value, +inp.dataset.fs);
+      } else {
+        meta[inp.dataset.field] = +inp.value;
+      }
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.case-btn').forEach(b=>{
+    b.onclick = ()=>{
+      const meta = getMeta(headingMeta, b.parentElement.dataset.name, 120, -1);
+      meta.case = b.dataset.case;
+      renderHeadingScalePreview();
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.ts-reset').forEach(b=>{
+    b.onclick = ()=>{ delete headingOverrides[b.dataset.name]; updateAll(); };
+  });
+  host.querySelectorAll('.ts-delete').forEach(b=>{
+    b.onclick = ()=>{
+      const idx = +b.dataset.idx;
+      const name = headingStepNames[idx];
+      const prev = {
+        names: [...headingStepNames],
+        ov: JSON.parse(JSON.stringify(headingOverrides)),
+        meta: JSON.parse(JSON.stringify(headingMeta))
+      };
+      headingStepNames.splice(idx, 1);
+      delete headingOverrides[name];
+      delete headingMeta[name];
+      renderHeadingScalePreview();
+      updateAll();
+      showToast(`Removed heading step "${name}"`, ()=>{
+        headingStepNames = prev.names; headingOverrides = prev.ov; headingMeta = prev.meta;
+        renderHeadingScalePreview(); updateAll();
+      });
+    };
+  });
+  host.querySelectorAll('.ts-name-input').forEach(inp=>{
+    inp.onchange = ()=>{
+      const idx = +inp.dataset.idx;
+      const oldName = headingStepNames[idx];
+      const newName = cleanName(inp.value) || oldName;
+      if(newName !== oldName){
+        if(headingOverrides[oldName]){ headingOverrides[newName] = headingOverrides[oldName]; delete headingOverrides[oldName]; }
+        if(headingMeta[oldName]){ headingMeta[newName] = headingMeta[oldName]; delete headingMeta[oldName]; }
+        headingStepNames[idx] = newName;
+      }
+      renderHeadingScalePreview();
+      updateAll();
+    };
+  });
+}
+document.getElementById('resetAllHeading').onclick = ()=>{
+  if(Object.keys(headingOverrides).length === 0) return;
+  const prev = JSON.parse(JSON.stringify(headingOverrides));
+  headingOverrides = {};
+  updateAll();
+  showToast('Heading sizes reset to the computed scale', ()=>{ headingOverrides = prev; updateAll(); });
+};
+document.getElementById('headingPreviewToggle').querySelectorAll('button').forEach(b=>{
+  b.onclick = ()=> setViewMode(b.dataset.pvmode);
+});
+document.getElementById('headingBaseSize').addEventListener('input', ()=>{
+  headingBase[viewMode] = +document.getElementById('headingBaseSize').value || headingBase[viewMode];
+  updateAll();
+});
+document.getElementById('headingBaseSize').addEventListener('change', ()=>{
+  headingBase[viewMode] = +document.getElementById('headingBaseSize').value || headingBase[viewMode];
+  updateAll();
+});
+document.getElementById('headingRatio').addEventListener('input', ()=>{
+  headingRatioVal[viewMode] = +document.getElementById('headingRatio').value || headingRatioVal[viewMode];
+  updateAll();
+});
+document.getElementById('headingRatio').addEventListener('change', ()=>{
+  headingRatioVal[viewMode] = +document.getElementById('headingRatio').value || headingRatioVal[viewMode];
+  updateAll();
+});
+document.getElementById('addHeadingStep').onclick = ()=>{
+  let n = headingStepNames.length + 1;
+  let name = `step-${n}`;
+  while(headingStepNames.includes(name)){ n++; name = `step-${n}`; }
+  headingStepNames.push(name);
+  renderHeadingScalePreview();
+  updateAll();
+};
+
+function renderBodyScalePreview(){
+  const desktopScale = bodyScale('desktop');
+  const mobileScale = bodyScale('mobile');
+  const bodyF = document.getElementById('fontBody').value;
+  const host = document.getElementById('bodyScalePreview');
+  const view = viewMode === 'mobile' ? 'mobile' : 'desktop';
+  host.innerHTML = desktopScale.map((s,i)=>{
+    const m = mobileScale[i];
+    const meta = getMeta(bodyMeta, s.name, 160, 0);
+    const pv = view === 'mobile' ? m : s;
+    return `
+    <div class="type-scale-row">
+      <div class="row-preview">
+        <span class="sample" style="font-size:${pv.px}px; font-family:${bodyF}; line-height:${lhCssValue(meta, view, pv.px)}; letter-spacing:${meta.ls/100}em; text-transform:${meta.case};">The quick brown fox jumps over the lazy dog</span>
+      </div>
+      <div class="row-controls">
+        <input type="text" class="ts-name-input" data-idx="${i}" value="${esc(s.name)}" aria-label="Step name">
+        ${stepperHtml(pv.px, `class="ts-size" data-name="${s.name}" data-view="${view}"`, pv.overridden)}
+        ${lhFieldHtml(meta, s.name, view, pv.px)}
+        ${stepperHtml(lsToDisplay(meta.ls, pv.px), `class="ts-meta" data-name="${s.name}" data-field="ls" data-fs="${pv.px}" title="Letter-spacing"`)}
+        ${caseToggleHtml(s.name, meta.case)}
+        <div class="row-actions">
+          <button class="ts-reset" data-name="${s.name}" title="Reset this step's sizes back to the computed scale">↺ Reset</button>
+          <button class="ts-delete" data-idx="${i}" title="Delete this step">×</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  wireSteppers(host);
+  host.querySelectorAll('.ts-size').forEach(inp=>{
+    inp.onchange = ()=>{
+      const name = inp.dataset.name, v = inp.dataset.view;
+      if(!bodyOverrides[name]) bodyOverrides[name] = {};
+      bodyOverrides[name][v] = inp.value;
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.ts-lh').forEach(inp=>{
+    inp.onchange = ()=>{
+      const meta = getMeta(bodyMeta, inp.dataset.name, 160, 0);
+      if(lineHeightUnit === 'percent'){
+        meta.lh = +inp.value;
+      } else {
+        if(!meta.lhPx) meta.lhPx = {};
+        meta.lhPx[inp.dataset.view] = +inp.value;
+      }
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.ts-meta').forEach(inp=>{
+    inp.onchange = ()=>{
+      const meta = getMeta(bodyMeta, inp.dataset.name, 160, 0);
+      if(inp.dataset.field === 'ls'){
+        meta.ls = lsFromDisplay(+inp.value, +inp.dataset.fs);
+      } else {
+        meta[inp.dataset.field] = +inp.value;
+      }
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.case-btn').forEach(b=>{
+    b.onclick = ()=>{
+      const meta = getMeta(bodyMeta, b.parentElement.dataset.name, 160, 0);
+      meta.case = b.dataset.case;
+      renderBodyScalePreview();
+      updateAll();
+    };
+  });
+  host.querySelectorAll('.ts-reset').forEach(b=>{
+    b.onclick = ()=>{ delete bodyOverrides[b.dataset.name]; updateAll(); };
+  });
+  host.querySelectorAll('.ts-delete').forEach(b=>{
+    b.onclick = ()=>{
+      const idx = +b.dataset.idx;
+      const name = bodyStepNames[idx];
+      const prev = {
+        names: [...bodyStepNames],
+        ov: JSON.parse(JSON.stringify(bodyOverrides)),
+        meta: JSON.parse(JSON.stringify(bodyMeta))
+      };
+      bodyStepNames.splice(idx, 1);
+      delete bodyOverrides[name];
+      delete bodyMeta[name];
+      renderBodyScalePreview();
+      updateAll();
+      showToast(`Removed body step "${name}"`, ()=>{
+        bodyStepNames = prev.names; bodyOverrides = prev.ov; bodyMeta = prev.meta;
+        renderBodyScalePreview(); updateAll();
+      });
+    };
+  });
+  host.querySelectorAll('.ts-name-input').forEach(inp=>{
+    inp.onchange = ()=>{
+      const idx = +inp.dataset.idx;
+      const oldName = bodyStepNames[idx];
+      const newName = cleanName(inp.value) || oldName;
+      if(newName !== oldName){
+        if(bodyOverrides[oldName]){ bodyOverrides[newName] = bodyOverrides[oldName]; delete bodyOverrides[oldName]; }
+        if(bodyMeta[oldName]){ bodyMeta[newName] = bodyMeta[oldName]; delete bodyMeta[oldName]; }
+        bodyStepNames[idx] = newName;
+      }
+      renderBodyScalePreview();
+      updateAll();
+    };
+  });
+}
+document.getElementById('resetAllBody').onclick = ()=>{
+  if(Object.keys(bodyOverrides).length === 0) return;
+  const prev = JSON.parse(JSON.stringify(bodyOverrides));
+  bodyOverrides = {};
+  updateAll();
+  showToast('Body sizes reset to the computed scale', ()=>{ bodyOverrides = prev; updateAll(); });
+};
+document.getElementById('bodyPreviewToggle').querySelectorAll('button').forEach(b=>{
+  b.onclick = ()=> setViewMode(b.dataset.pvmode);
+});
+document.getElementById('bodyBaseSize').addEventListener('input', ()=>{
+  bodyBase[viewMode] = +document.getElementById('bodyBaseSize').value || bodyBase[viewMode];
+  updateAll();
+});
+document.getElementById('bodyBaseSize').addEventListener('change', ()=>{
+  bodyBase[viewMode] = +document.getElementById('bodyBaseSize').value || bodyBase[viewMode];
+  updateAll();
+});
+document.getElementById('bodyRatio').addEventListener('input', ()=>{
+  bodyRatioVal[viewMode] = +document.getElementById('bodyRatio').value || bodyRatioVal[viewMode];
+  updateAll();
+});
+document.getElementById('bodyRatio').addEventListener('change', ()=>{
+  bodyRatioVal[viewMode] = +document.getElementById('bodyRatio').value || bodyRatioVal[viewMode];
+  updateAll();
+});
+document.getElementById('addBodyStep').onclick = ()=>{
+  let n = bodyStepNames.length + 1;
+  let name = `step-${n}`;
+  while(bodyStepNames.includes(name)){ n++; name = `step-${n}`; }
+  bodyStepNames.push(name);
+  renderBodyScalePreview();
+  updateAll();
+};
+function renderSpacingPreview(){
+  const scale = spacingScale();
+  const max = Math.max(...scale, 1);
+  document.getElementById('spacingList').innerHTML = scale.map(px=>`
+    <div class="spacing-chip">
+      <div class="bar" style="height:${Math.max(4, (px/max)*80)}px"></div>
+      <div class="val">${px}</div>
+    </div>
+  `).join('');
+}
+document.getElementById('vtDesktop').onclick = ()=> setViewMode('desktop');
+document.getElementById('vtMobile').onclick = ()=> setViewMode('mobile');
+
+function renderPreviewPanel(){
+  const disp = document.getElementById('fontDisplay').value;
+  const bodyF = document.getElementById('fontBody').value;
+  const hScale = headingScale(viewMode);
+  const bScale = bodyScale(viewMode);
+  const panel = document.getElementById('previewPanel');
+  panel.style.setProperty('--disp-preview', disp);
+  panel.style.setProperty('--body-preview', bodyF);
+  const h3size = hScale[0] ? hScale[0].px : 32; // h1, largest heading
+  const midBody = bScale.find(s=>s.name==='md') || bScale[Math.floor(bScale.length/2)] || bScale[0] || {px:16};
+  const smallBody = bScale[bScale.length-1] || {px:11};
+  const pSize = midBody.px;
+  const eyebrowSize = smallBody.px;
+  const btnSize = (bScale.find(s=>s.name==='sm') || smallBody).px;
+  document.getElementById('pvH3').style.fontSize = h3size+'px';
+  document.getElementById('pvP').style.fontSize = pSize+'px';
+  document.querySelector('#previewPanel .eyebrow').style.fontSize = eyebrowSize+'px';
+  document.getElementById('pvBtn').style.fontSize = btnSize+'px';
+  const h1Meta = getMeta(headingMeta, hScale[0] ? hScale[0].name : 'h1', 120, -1);
+  const midMeta = getMeta(bodyMeta, midBody.name, 160, 0);
+  document.getElementById('pvH3').style.lineHeight = lhCssValue(h1Meta, viewMode, h3size);
+  document.getElementById('pvH3').style.letterSpacing = (h1Meta.ls/100)+'em';
+  document.getElementById('pvP').style.lineHeight = lhCssValue(midMeta, viewMode, pSize);
+  document.getElementById('pvP').style.letterSpacing = (midMeta.ls/100)+'em';
+  document.getElementById('pvH3').style.textTransform = h1Meta.case;
+  document.getElementById('pvP').style.textTransform = midMeta.case;
+  const primary = (previewRoles.primary != null && colors[previewRoles.primary]) || colors[0] || {hex:'#4F46E5'};
+  const inkC = (previewRoles.text != null && colors[previewRoles.text]) || colors[1] || colors[0] || {hex:'#111214'};
+  document.getElementById('pvBtn').style.background = primary.hex;
+  document.getElementById('pvBtn').style.color = '#fff';
+  document.getElementById('pvH3').style.color = inkC.hex;
+  document.getElementById('pvP').style.color = inkC.hex;
+  document.getElementById('pvSwatches').innerHTML = colors.map(c=>`<div class="sw" style="background:${c.hex}" title="${c.name}"></div>`).join('');
+  document.getElementById('vtReadout').textContent =
+    `${viewMode === 'mobile' ? 'Mobile' : 'Desktop'} · h1 ${h3size}px · body ${midBody.name} ${pSize}px`;
+}
+
+function fontRefFilename(f){
+  const ext = fileExtFromFilename(f.file.name) || f.format;
+  return `${f.family}.${ext}`;
+}
+
+function buildFontFaces(){
+  if(!uploadedFonts.length) return '';
+  const embedded = uploadedFonts.filter(f=>f.mode === 'embed');
+  const linked = uploadedFonts.filter(f=>f.mode === 'reference');
+  let out = '';
+  if(embedded.length){
+    out += '/* uploaded project fonts, embedded as base64 so this file is self-contained */\n';
+    embedded.forEach(f=>{
+      out += `@font-face {\n  font-family: '${f.family}';\n  src: url(data:font/${f.format};base64,${f.base64}) format('${f.format}');\n  font-display: swap;\n}\n`;
+    });
+  }
+  if(linked.length){
+    out += '/* fonts over 200KB are linked rather than embedded, to keep this file small.\n   Use "Download all (zip)" to get tokens.css plus a /fonts folder with these files. */\n';
+    linked.forEach(f=>{
+      out += `@font-face {\n  font-family: '${f.family}';\n  src: url('./fonts/${fontRefFilename(f)}') format('${f.format}');\n  font-display: swap;\n}\n`;
+    });
+  }
+  return out + '\n';
+}
+
+function clampFor(minPx, maxPx, minVw, maxVw){
+  const lo = Math.min(minPx, maxPx), hi = Math.max(minPx, maxPx);
+  if(maxVw <= minVw || hi === lo) return `${(hi/16).toFixed(4)}rem`;
+  const slope = (maxPx - minPx) / (maxVw - minVw);
+  const yIntersection = -minVw * slope + minPx;
+  const preferredRem = yIntersection / 16;
+  const slopeVw = slope * 100;
+  return `clamp(${(lo/16).toFixed(4)}rem, ${preferredRem.toFixed(4)}rem + ${slopeVw.toFixed(4)}vw, ${(hi/16).toFixed(4)}rem)`;
+}
+
+function buildCss(){
+  const hDesktop = headingScale('desktop'), hMobile = headingScale('mobile');
+  const bDesktop = bodyScale('desktop'), bMobile = bodyScale('mobile');
+  const responsive = document.getElementById('responsiveToggle').checked;
+  const vwMin = +document.getElementById('vwMin').value || 375;
+  const vwMax = +document.getElementById('vwMax').value || 1440;
+  const spacing = spacingScale();
+  const padding = paddingScale();
+  const radius = radiusScale();
+  let out = buildFontFaces() + ':root {\n  /* colors */\n';
+  colors.forEach(c=> out += `  --color-${c.name}: ${c.hex};\n`);
+  out += '\n  /* heading scale (heading font) */\n';
+  if(responsive){
+    out += `  /* fluid between ${vwMin}px and ${vwMax}px viewport width */\n`;
+    hDesktop.forEach((s,i)=> out += `  --font-size-${s.name}: ${clampFor(hMobile[i].px, s.px, vwMin, vwMax)};\n`);
+  } else {
+    hDesktop.forEach(s=> out += `  --font-size-${s.name}: ${s.px}px;\n`);
+  }
+  out += '\n  /* body scale (body font) */\n';
+  if(responsive){
+    bDesktop.forEach((s,i)=> out += `  --font-size-body-${s.name}: ${clampFor(bMobile[i].px, s.px, vwMin, vwMax)};\n`);
+  } else {
+    bDesktop.forEach(s=> out += `  --font-size-body-${s.name}: ${s.px}px;\n`);
+  }
+  out += '\n  /* line-height & letter-spacing */\n';
+  hDesktop.forEach((s,i)=>{
+    const meta = getMeta(headingMeta, s.name, 120, -1);
+    if(lineHeightUnit === 'px'){
+      const dLh = (meta.lhPx && meta.lhPx.desktop != null) ? meta.lhPx.desktop : Math.round(meta.lh/100*s.px);
+      const mLh = (meta.lhPx && meta.lhPx.mobile != null) ? meta.lhPx.mobile : Math.round(meta.lh/100*hMobile[i].px);
+      out += `  --line-height-${s.name}: ${responsive ? clampFor(mLh, dLh, vwMin, vwMax) : dLh+'px'};\n`;
+    } else {
+      out += `  --line-height-${s.name}: ${(meta.lh/100).toFixed(2)};\n`;
+    }
+    out += `  --letter-spacing-${s.name}: ${letterSpacingUnit === 'px' ? (Math.round(meta.ls/100*s.px*100)/100)+'px' : (meta.ls/100).toFixed(4)+'em'};\n`;
+  });
+  bDesktop.forEach((s,i)=>{
+    const meta = getMeta(bodyMeta, s.name, 160, 0);
+    if(lineHeightUnit === 'px'){
+      const dLh = (meta.lhPx && meta.lhPx.desktop != null) ? meta.lhPx.desktop : Math.round(meta.lh/100*s.px);
+      const mLh = (meta.lhPx && meta.lhPx.mobile != null) ? meta.lhPx.mobile : Math.round(meta.lh/100*bMobile[i].px);
+      out += `  --line-height-body-${s.name}: ${responsive ? clampFor(mLh, dLh, vwMin, vwMax) : dLh+'px'};\n`;
+    } else {
+      out += `  --line-height-body-${s.name}: ${(meta.lh/100).toFixed(2)};\n`;
+    }
+    out += `  --letter-spacing-body-${s.name}: ${letterSpacingUnit === 'px' ? (Math.round(meta.ls/100*s.px*100)/100)+'px' : (meta.ls/100).toFixed(4)+'em'};\n`;
+  });
+  out += `\n  --font-heading: ${document.getElementById('fontDisplay').value};\n`;
+  out += `  --font-body: ${document.getElementById('fontBody').value};\n`;
+  out += '\n  /* text case */\n';
+  hDesktop.forEach(s=>{
+    const meta = getMeta(headingMeta, s.name, 120, -1);
+    out += `  --text-case-${s.name}: ${meta.case};\n`;
+  });
+  bDesktop.forEach(s=>{
+    const meta = getMeta(bodyMeta, s.name, 160, 0);
+    out += `  --text-case-body-${s.name}: ${meta.case};\n`;
+  });
+  out += '\n  /* spacing */\n';
+  spacing.forEach((px,i)=> out += `  --space-${i+1}: ${px}px;\n`);
+  out += '\n  /* padding */\n';
+  padding.forEach((px,i)=> out += `  --padding-${STEP_NAMES[i] || i+1}: ${px}px;\n`);
+  out += '\n  /* radius */\n';
+  radius.forEach((px,i)=> out += `  --radius-${STEP_NAMES[i] || i+1}: ${px}px;\n`);
+  out += '}\n';
+  return out;
+}
+function buildTailwind(){
+  const hDesktop = headingScale('desktop'), hMobile = headingScale('mobile');
+  const bDesktop = bodyScale('desktop'), bMobile = bodyScale('mobile');
+  const responsive = document.getElementById('responsiveToggle').checked;
+  const vwMin = +document.getElementById('vwMin').value || 375;
+  const vwMax = +document.getElementById('vwMax').value || 1440;
+  const spacing = spacingScale();
+  const padding = paddingScale();
+  const radius = radiusScale();
+  const colorObj = {}; colors.forEach(c=> colorObj[c.name] = c.hex);
+  const fontSizeObj = {};
+  hDesktop.forEach((s,i)=>{
+    fontSizeObj[s.name] = responsive ? clampFor(hMobile[i].px, s.px, vwMin, vwMax) : s.px+'px';
+  });
+  bDesktop.forEach((s,i)=>{
+    fontSizeObj['body-'+s.name] = responsive ? clampFor(bMobile[i].px, s.px, vwMin, vwMax) : s.px+'px';
+  });
+  const spacingObj = {}; spacing.forEach((px,i)=> spacingObj[i+1] = px+'px');
+  const paddingObj = {}; padding.forEach((px,i)=> paddingObj[STEP_NAMES[i] || i+1] = px+'px');
+  const radiusObj = {}; radius.forEach((px,i)=> radiusObj[STEP_NAMES[i] || i+1] = px+'px');
+  const lineHeightObj = {}; const letterSpacingObj = {};
+  hDesktop.forEach((s,i)=>{
+    const meta = getMeta(headingMeta, s.name, 120, -1);
+    if(lineHeightUnit === 'px'){
+      const dLh = (meta.lhPx && meta.lhPx.desktop != null) ? meta.lhPx.desktop : Math.round(meta.lh/100*s.px);
+      const mLh = (meta.lhPx && meta.lhPx.mobile != null) ? meta.lhPx.mobile : Math.round(meta.lh/100*hMobile[i].px);
+      lineHeightObj[s.name] = responsive ? clampFor(mLh, dLh, vwMin, vwMax) : dLh+'px';
+    } else {
+      lineHeightObj[s.name] = (meta.lh/100).toFixed(2);
+    }
+    letterSpacingObj[s.name] = letterSpacingUnit === 'px' ? (Math.round(meta.ls/100*s.px*100)/100)+'px' : (meta.ls/100).toFixed(4)+'em';
+  });
+  bDesktop.forEach((s,i)=>{
+    const meta = getMeta(bodyMeta, s.name, 160, 0);
+    if(lineHeightUnit === 'px'){
+      const dLh = (meta.lhPx && meta.lhPx.desktop != null) ? meta.lhPx.desktop : Math.round(meta.lh/100*s.px);
+      const mLh = (meta.lhPx && meta.lhPx.mobile != null) ? meta.lhPx.mobile : Math.round(meta.lh/100*bMobile[i].px);
+      lineHeightObj['body-'+s.name] = responsive ? clampFor(mLh, dLh, vwMin, vwMax) : dLh+'px';
+    } else {
+      lineHeightObj['body-'+s.name] = (meta.lh/100).toFixed(2);
+    }
+    letterSpacingObj['body-'+s.name] = letterSpacingUnit === 'px' ? (Math.round(meta.ls/100*s.px*100)/100)+'px' : (meta.ls/100).toFixed(4)+'em';
+  });
+  const config = {
+    theme: { extend: {
+      colors: colorObj,
+      fontSize: fontSizeObj,
+      lineHeight: lineHeightObj,
+      letterSpacing: letterSpacingObj,
+      spacing: spacingObj,
+      padding: paddingObj,
+      borderRadius: radiusObj,
+      fontFamily: {
+        heading: [document.getElementById('fontDisplay').value.split(',')[0].replace(/'/g,'')],
+        body: [document.getElementById('fontBody').value.split(',')[0].replace(/'/g,'')]
+      }
+    }}
+  };
+  let note = '';
+  if(uploadedFonts.length){
+    note += '\n// Uploaded fonts are embedded as @font-face in tokens.css — import that file\n// alongside this config so the font names below actually resolve.\n';
+  }
+  const caseLines = [];
+  hDesktop.forEach(s=>{
+    const c = getMeta(headingMeta, s.name, 120, -1).case;
+    if(c !== 'none') caseLines.push(`${s.name}: ${c}`);
+  });
+  bDesktop.forEach(s=>{
+    const c = getMeta(bodyMeta, s.name, 160, 0).case;
+    if(c !== 'none') caseLines.push(`body-${s.name}: ${c}`);
+  });
+  if(caseLines.length){
+    note += `\n// Text case isn't a themeable Tailwind key — apply directly with utility classes:\n` +
+      caseLines.map(l => `// ${l}`).join('\n') + '\n';
+  }
+  return '/** @type {import(\'tailwindcss\').Config} */' + note + '\nmodule.exports = ' + JSON.stringify(config, null, 2);
+}
+
+let activeTab = 'css';
+function updateExport(){
+  const out = { css: buildCss, tw: buildTailwind }[activeTab]();
+  document.getElementById('exportOut').value = out;
+}
+document.querySelectorAll('.export-tabs button').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('.export-tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = btn.dataset.t;
+    updateExport();
+  };
+});
+
+function updateAll(){
+  renderHeadingScalePreview();
+  renderBodyScalePreview();
+  renderSpacingPreview();
+  renderPaddingPreview();
+  renderRadiusPreview();
+  renderPreviewPanel();
+  updateExport();
+  scheduleAutosave();
+}
+
+// ---- autosave (localStorage, debounced) ----
+// "Save project" stays the portable format; this just survives an accidental refresh.
+const AUTOSAVE_KEY = 'dte-autosave-v1';
+let autosaveTimer = null;
+let autosaveReady = false; // don't overwrite a stored session with defaults during init
+function scheduleAutosave(){
+  if(!autosaveReady) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(()=>{
+    try{
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(serializeProject()));
+    }catch(err){
+      // Likely quota (embedded font base64 can be large) — retry without font data
+      try{
+        const slim = serializeProject();
+        slim.uploadedFonts = [];
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(slim));
+      }catch(err2){ /* storage unavailable — portable saves still work */ }
+    }
+  }, 600);
+}
+async function tryRestoreAutosave(){
+  try{
+    const raw = localStorage.getItem(AUTOSAVE_KEY);
+    if(raw){
+      const data = JSON.parse(raw);
+      data.uploadedFonts = (data.uploadedFonts || []).filter(f => f.base64);
+      await restoreProject(data);
+    }
+  }catch(err){ /* unreadable autosave — start fresh */ }
+  autosaveReady = true;
+  scheduleAutosave();
+}
+document.getElementById('newProjectBtn').onclick = ()=>{
+  if(confirm('Start a new project? This clears the autosave in this browser — anything not saved with "Save project" is lost.')){
+    try{ localStorage.removeItem(AUTOSAVE_KEY); }catch(err){}
+    location.reload();
+  }
+};
+['vwMin','vwMax','fontDisplay','fontBody','spacingScale','paddingScale','radiusScale'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', updateAll);
+  document.getElementById(id).addEventListener('change', updateAll);
+});
+document.getElementById('responsiveToggle').addEventListener('change', updateExport);
+
+document.getElementById('copyExport').onclick = async (e)=>{
+  const btn = e.currentTarget;
+  try{
+    await navigator.clipboard.writeText(document.getElementById('exportOut').value);
+    flashLabel(btn, 'Copied ✓');
+  }catch(err){
+    flashLabel(btn, 'Copy failed');
+  }
+};
+document.getElementById('downloadExport').onclick = ()=>{
+  const linked = uploadedFonts.filter(f=>f.mode === 'reference');
+  if(activeTab === 'css' && linked.length){
+    const proceed = confirm(
+      `${linked.length} font${linked.length>1?'s are':' is'} linked rather than embedded, so tokens.css alone won't include the actual font file${linked.length>1?'s':''}.\n\nUse "Download all (zip)" instead to get tokens.css plus a /fonts folder — or press OK to download tokens.css only.`
+    );
+    if(!proceed) return;
+  }
+  const ext = { css:'css', tw:'tailwind.config.js' }[activeTab];
+  const filename = activeTab === 'css' ? 'tokens.css' : ext;
+  const blob = new Blob([document.getElementById('exportOut').value], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+};
+document.getElementById('downloadAll').onclick = async ()=>{
+  if(typeof JSZip === 'undefined'){
+    alert("The zip library couldn't load — check your connection and reload, or use \"Download file\" on each tab instead.");
+    return;
+  }
+  const zip = new JSZip();
+  zip.file('tokens.css', buildCss());
+  zip.file('tailwind.config.js', buildTailwind());
+  const linked = uploadedFonts.filter(f=>f.mode === 'reference');
+  if(linked.length){
+    const fontsFolder = zip.folder('fonts');
+    linked.forEach(f=> fontsFolder.file(fontRefFilename(f), f.file));
+  }
+  const blob = await zip.generateAsync({type:'blob'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'design-tokens.zip'; a.click();
+};
+
+// ---- save / load project (full tool state, for resuming later) ----
+function serializeProject(){
+  return {
+    tool: 'design-token-exporter', version: 2,
+    colors,
+    typography: {
+      fontDisplay: document.getElementById('fontDisplay').value,
+      fontBody: document.getElementById('fontBody').value,
+      headingBase,
+      headingRatioVal,
+      bodyBase,
+      bodyRatioVal,
+      bodyStepNames,
+      headingStepNames,
+      vwMin: document.getElementById('vwMin').value,
+      vwMax: document.getElementById('vwMax').value,
+      responsive: document.getElementById('responsiveToggle').checked,
+      headingOverrides,
+      bodyOverrides,
+      headingMeta,
+      bodyMeta,
+      lineHeightUnit,
+      letterSpacingUnit
+    },
+    spacingScale: document.getElementById('spacingScale').value,
+    paddingScale: document.getElementById('paddingScale').value,
+    radiusScale: document.getElementById('radiusScale').value,
+    uploadedFonts: uploadedFonts.map(f=>({
+      name: f.name, family: f.family, format: f.format, base64: f.base64,
+      filename: f.filename, size: f.size, mode: f.mode
+    }))
+  };
+}
+
+async function restoreProject(data){
+  // rebuild fonts first so <option>s exist before we set select values
+  uploadedFonts = [];
+  document.getElementById('uploadedFontsList').innerHTML = '';
+  for(const f of (data.uploadedFonts || [])){
+    const entry = { ...f, status: 'loading' };
+    entry.file = new File([base64ToBytes(f.base64)], f.filename || (f.name + '.' + f.format), { type: 'font/' + f.format });
+    uploadedFonts.push(entry);
+    try{
+      const fontFace = new FontFace(f.family, `url(data:font/${f.format};base64,${f.base64})`);
+      await fontFace.load();
+      document.fonts.add(fontFace);
+      entry.status = 'ready';
+    }catch(e){
+      entry.status = 'error';
+    }
+  }
+  refreshFontSelects();
+  renderUploadedFonts();
+
+  colors = data.colors || colors;
+
+  const t = data.typography || {};
+  if(t.fontDisplay) document.getElementById('fontDisplay').value = t.fontDisplay;
+  if(t.fontBody) document.getElementById('fontBody').value = t.fontBody;
+  if(t.headingBase) headingBase = t.headingBase;
+  else if(t.headingBaseSize || t.headingMobileBaseSize){ // back-compat with saves from before per-view ratio
+    headingBase = { desktop: +t.headingBaseSize || 16, mobile: +t.headingMobileBaseSize || 15 };
+  }
+  if(t.headingRatioVal) headingRatioVal = t.headingRatioVal;
+  else if(t.headingRatio){
+    headingRatioVal = { desktop: +t.headingRatio, mobile: +t.headingRatio };
+  }
+  if(t.bodyBase) bodyBase = t.bodyBase;
+  else if(t.bodyBaseSize || t.bodyMobileBaseSize){
+    bodyBase = { desktop: +t.bodyBaseSize || 16, mobile: +t.bodyMobileBaseSize || 15 };
+  }
+  if(t.bodyRatioVal) bodyRatioVal = t.bodyRatioVal;
+  else if(t.bodyRatio){
+    bodyRatioVal = { desktop: +t.bodyRatio, mobile: +t.bodyRatio };
+  }
+  setViewMode('desktop');
+  if(t.bodyStepNames && t.bodyStepNames.length) bodyStepNames = t.bodyStepNames;
+  if(t.headingStepNames && t.headingStepNames.length) headingStepNames = t.headingStepNames;
+  if(t.vwMin) document.getElementById('vwMin').value = t.vwMin;
+  if(t.vwMax) document.getElementById('vwMax').value = t.vwMax;
+  document.getElementById('responsiveToggle').checked = !!t.responsive;
+  headingOverrides = t.headingOverrides || {};
+  bodyOverrides = t.bodyOverrides || {};
+  headingMeta = t.headingMeta || {};
+  bodyMeta = t.bodyMeta || {};
+  lineHeightUnit = t.lineHeightUnit === 'px' ? 'px' : 'percent';
+  document.getElementById('lhUnitPercent').classList.toggle('active', lineHeightUnit === 'percent');
+  document.getElementById('lhUnitPx').classList.toggle('active', lineHeightUnit === 'px');
+  updateLhLabels();
+  letterSpacingUnit = t.letterSpacingUnit === 'px' ? 'px' : 'percent';
+  document.getElementById('lsUnitPercent').classList.toggle('active', letterSpacingUnit === 'percent');
+  document.getElementById('lsUnitPx').classList.toggle('active', letterSpacingUnit === 'px');
+  updateLsLabels();
+
+  if(data.spacingScale) document.getElementById('spacingScale').value = data.spacingScale;
+  if(data.paddingScale) document.getElementById('paddingScale').value = data.paddingScale;
+  if(data.radiusScale) document.getElementById('radiusScale').value = data.radiusScale;
+
+  renderColors();
+  updateAll();
+}
+
+document.getElementById('saveProjectBtn').onclick = (e)=>{
+  const blob = new Blob([JSON.stringify(serializeProject(), null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'design-tokens-project.json';
+  a.click();
+  flashLabel(e.currentTarget, 'Saved ✓');
+};
+document.getElementById('loadProjectInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if(data.tool !== 'design-token-exporter'){
+      const proceed = confirm('This doesn\'t look like a project file saved from this tool. Try loading it anyway?');
+      if(!proceed) return;
+    }
+    await restoreProject(data);
+  }catch(err){
+    alert('Could not read that file — make sure it\'s a design-tokens-project.json saved from "Save project".');
+  }
+  e.target.value = '';
+});
+
+// Enter commits a field the same way clicking away does, for every text/number input in the tool
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'file'){
+    e.preventDefault();
+    e.target.blur();
+  }
+});
+
+renderColors();
+wireSteppers(document);
+setViewMode('desktop');
+tryRestoreAutosave();
+</script>
+</body>
+</html>
